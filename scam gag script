@@ -1,5 +1,5 @@
--- Trade freez GAG (centered, animated border, drag handle)
--- Автор: для Казак. Фокус: центр-попин, градиентная обводка, drag-кнопка, без уведомлений-заглушек.
+-- Trade freez GAG — centered toggle, cheat-style UI, button ON(green)/OFF(red)
+-- Для Казак. Безопасный UI.
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -9,31 +9,39 @@ local Lighting = game:GetService("Lighting")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- ПАЛИТРА
+-- Палитра / размеры
 local COLORS = {
-    Primary  = Color3.fromRGB(38, 92, 255),
-    Primary2 = Color3.fromRGB(112, 68, 255),
-    BG       = Color3.fromRGB(18, 18, 22),
-    Panel    = Color3.fromRGB(24, 24, 30),
-    Stroke   = Color3.fromRGB(60, 60, 72),
-    Text     = Color3.fromRGB(235, 238, 245),
-    Muted    = Color3.fromRGB(160, 166, 185),
-    Success  = Color3.fromRGB(60, 210, 110),
-    Warn     = Color3.fromRGB(255, 167, 38)
+    BG       = Color3.fromRGB(18,18,22),
+    Panel    = Color3.fromRGB(24,24,30),
+    Stroke   = Color3.fromRGB(60,60,72),
+    Text     = Color3.fromRGB(235,238,245),
+
+    Primary  = Color3.fromRGB(38,92,255),
+    Primary2 = Color3.fromRGB(112,68,255),
+
+    ON       = Color3.fromRGB(60,210,110),
+    OFF      = Color3.fromRGB(230,72,72),
+    BTN      = Color3.fromRGB(28,28,36),
 }
 
--- Анимации
+local SIZES = {
+    ShellW = 560, ShellH = 340, -- крупное меню
+    BtnW = 280, BtnH = 42,      -- “нормальный” размер кнопок
+    RadiusShell = 16, RadiusPanel = 14, RadiusBtn = 10,
+}
+
 local EASE_OUT = TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 local EASE_IN  = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
 
--- GUI-основа
+-- ScreenGui
 local gui = Instance.new("ScreenGui")
 gui.Name = "TradeFreezGAG"
 gui.IgnoreGuiInset = true
 gui.ResetOnSpawn = false
+gui.DisplayOrder = 50
 gui.Parent = playerGui
 
--- Размытие сзади (мягкое)
+-- Размытие фона
 local function getBlur()
     local blur = Lighting:FindFirstChild("GAGBlur")
     if not blur then
@@ -45,49 +53,84 @@ local function getBlur()
     return blur
 end
 
--- Тоггл-кнопка (левый верх)
+-- КНОПКА ОТКРЫТИЯ (по центру + перетаскивание)
 local toggle = Instance.new("TextButton")
 toggle.Name = "GAG_Toggle"
 toggle.Parent = gui
-toggle.Size = UDim2.fromOffset(42, 42)
-toggle.Position = UDim2.fromOffset(18, 18)
+toggle.Size = UDim2.fromOffset(56, 56)
+toggle.AnchorPoint = Vector2.new(0.5, 0.5)
+toggle.Position = UDim2.fromScale(0.5, 0.5) -- по центру
 toggle.Text = "≡"
 toggle.Font = Enum.Font.GothamBold
-toggle.TextSize = 22
+toggle.TextSize = 24
 toggle.TextColor3 = COLORS.Text
 toggle.BackgroundColor3 = COLORS.Panel
 toggle.AutoButtonColor = false
+toggle.ZIndex = 100
+
 do
-    local c = Instance.new("UICorner", toggle); c.CornerRadius = UDim.new(0, 10)
+    local c = Instance.new("UICorner", toggle); c.CornerRadius = UDim.new(0, 12)
     local s = Instance.new("UIStroke", toggle); s.Thickness = 1; s.Color = COLORS.Stroke
+    local glow = Instance.new("UIGradient", toggle)
+    glow.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, COLORS.Primary),
+        ColorSequenceKeypoint.new(1, COLORS.Primary2),
+    })
+    glow.Rotation = 90
 end
 
--- ВНЕШНЯЯ ОБОЛОЧКА (градиентная обводка)
+-- Перетаскивание toggle
+do
+    local dragging, dragStart, startPos
+    local function update(input)
+        local delta = input.Position - dragStart
+        toggle.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+
+    toggle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = toggle.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            update(input)
+        end
+    end)
+end
+
+-- Внешняя оболочка (переливная “рамка”)
 local shell = Instance.new("Frame")
 shell.Name = "GAG_Shell"
 shell.Parent = gui
 shell.AnchorPoint = Vector2.new(0.5, 0.5)
 shell.Position = UDim2.fromScale(0.5, 0.5)
-shell.Size = UDim2.fromOffset(400, 240)
-shell.BackgroundColor3 = Color3.fromRGB(30, 30, 38) -- подложка для градиента
+shell.Size = UDim2.fromOffset(SIZES.ShellW, SIZES.ShellH)
+shell.BackgroundColor3 = Color3.fromRGB(30,30,38)
+shell.Visible = false
 
 local shellCorner = Instance.new("UICorner", shell)
-shellCorner.CornerRadius = UDim.new(0, 16)
+shellCorner.CornerRadius = UDim.new(0, SIZES.RadiusShell)
 
--- Градиент по фону оболочки, виден как "рамка" вокруг внутренней панели
 local borderGradient = Instance.new("UIGradient", shell)
-borderGradient.Rotation = 0
-borderGradient.Offset = Vector2.new(0, 0)
 borderGradient.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 255, 255)),
-    ColorSequenceKeypoint.new(0.20, Color3.fromRGB(255, 220, 120)),
-    ColorSequenceKeypoint.new(0.40, Color3.fromRGB(120, 240, 255)),
-    ColorSequenceKeypoint.new(0.60, Color3.fromRGB(180, 130, 255)),
-    ColorSequenceKeypoint.new(0.80, Color3.fromRGB(255, 140, 220)),
-    ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 255, 255)),
+    ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255,255,255)),
+    ColorSequenceKeypoint.new(0.20, Color3.fromRGB(255,220,120)),
+    ColorSequenceKeypoint.new(0.40, Color3.fromRGB(120,240,255)),
+    ColorSequenceKeypoint.new(0.60, Color3.fromRGB(180,130,255)),
+    ColorSequenceKeypoint.new(0.80, Color3.fromRGB(255,140,220)),
+    ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255,255,255)),
 })
 
--- Внутренняя панель (покрывает центр, оставляет 3px рамки)
+-- Внутренняя панель (оставляем 3px “рамку”)
 local panel = Instance.new("Frame")
 panel.Name = "GAG_Panel"
 panel.Parent = shell
@@ -96,12 +139,11 @@ panel.Position = UDim2.fromOffset(3, 3)
 panel.Size = UDim2.new(1, -6, 1, -6)
 
 local panelCorner = Instance.new("UICorner", panel)
-panelCorner.CornerRadius = UDim.new(0, 14)
+panelCorner.CornerRadius = UDim.new(0, SIZES.RadiusPanel)
 
 local panelStroke = Instance.new("UIStroke", panel)
 panelStroke.Thickness = 1
 panelStroke.Color = COLORS.Stroke
-panelStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 
 -- Тень
 local shadow = Instance.new("ImageLabel")
@@ -117,16 +159,15 @@ shadow.Size = UDim2.new(1, 40, 1, 40)
 shadow.Position = UDim2.fromOffset(-20, -16)
 shadow.ZIndex = 0
 
--- Верхняя полоса
+-- Верхняя полоса + заголовок + кнопки
 local top = Instance.new("Frame", panel)
 top.Name = "TopBar"
 top.BackgroundColor3 = COLORS.Panel
-top.Size = UDim2.new(1, 0, 0, 46)
+top.Size = UDim2.new(1, 0, 0, 48)
 
 local topCorner = Instance.new("UICorner", top)
-topCorner.CornerRadius = UDim.new(0, 14)
+topCorner.CornerRadius = UDim.new(0, SIZES.RadiusPanel)
 
--- Акцент-градиент на топбаре (тонко)
 local topGrad = Instance.new("UIGradient", top)
 topGrad.Color = ColorSequence.new({
     ColorSequenceKeypoint.new(0, COLORS.Primary),
@@ -134,18 +175,15 @@ topGrad.Color = ColorSequence.new({
 })
 
 local title = Instance.new("TextLabel", top)
-title.Name = "Title"
 title.Text = "Trade freez GAG"
 title.Font = Enum.Font.GothamBold
 title.TextSize = 20
 title.TextColor3 = COLORS.Text
 title.BackgroundTransparency = 1
 title.Position = UDim2.fromOffset(16, 8)
-title.Size = UDim2.new(1, -120, 1, -8)
+title.Size = UDim2.new(1, -140, 1, -8)
 
--- Кнопка закрытия ✕
 local closeBtn = Instance.new("TextButton", top)
-closeBtn.Name = "Close"
 closeBtn.Text = "✕"
 closeBtn.Font = Enum.Font.GothamBold
 closeBtn.TextSize = 18
@@ -157,9 +195,7 @@ closeBtn.Size = UDim2.fromOffset(34, 28)
 closeBtn.Position = UDim2.new(1, -44, 0.5, -14)
 local closeCorner = Instance.new("UICorner", closeBtn); closeCorner.CornerRadius = UDim.new(0, 8)
 
--- КНОПКА-ПЕРЕХВАТ ДЛЯ DRAG ("⠿")
 local dragBtn = Instance.new("TextButton", top)
-dragBtn.Name = "DragHandle"
 dragBtn.Text = "⠿"
 dragBtn.Font = Enum.Font.GothamBold
 dragBtn.TextSize = 16
@@ -171,12 +207,11 @@ dragBtn.Size = UDim2.fromOffset(34, 28)
 dragBtn.Position = UDim2.new(1, -84, 0.5, -14)
 local dragCorner = Instance.new("UICorner", dragBtn); dragCorner.CornerRadius = UDim.new(0, 8)
 
--- Контент (без “пустой UI” текста)
+-- Контент
 local content = Instance.new("Frame", panel)
-content.Name = "Content"
 content.BackgroundTransparency = 1
-content.Position = UDim2.fromOffset(16, 58)
-content.Size = UDim2.new(1, -32, 1, -74)
+content.Position = UDim2.fromOffset(16, 62)
+content.Size = UDim2.new(1, -32, 1, -78)
 
 local uiList = Instance.new("UIListLayout", content)
 uiList.Padding = UDim.new(0, 10)
@@ -184,50 +219,76 @@ uiList.FillDirection = Enum.FillDirection.Vertical
 uiList.HorizontalAlignment = Enum.HorizontalAlignment.Left
 uiList.SortOrder = Enum.SortOrder.LayoutOrder
 
-local function makeButton(text, color)
+-- Фабрика тумблер-кнопок (ON green / OFF red)
+local function makeToggleButton(text)
     local btn = Instance.new("TextButton")
     btn.Text = text
     btn.Font = Enum.Font.GothamBold
     btn.TextSize = 16
     btn.TextColor3 = COLORS.Text
     btn.AutoButtonColor = false
-    btn.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
-    btn.Size = UDim2.new(0, 220, 0, 38)
+    btn.BackgroundColor3 = COLORS.BTN
+    btn.Size = UDim2.fromOffset(SIZES.BtnW, SIZES.BtnH)
 
-    local corner = Instance.new("UICorner", btn); corner.CornerRadius = UDim.new(0, 10)
+    local corner = Instance.new("UICorner", btn); corner.CornerRadius = UDim.new(0, SIZES.RadiusBtn)
     local stroke = Instance.new("UIStroke", btn); stroke.Color = COLORS.Stroke; stroke.Thickness = 1
 
-    local bar = Instance.new("Frame", btn)
-    bar.BackgroundColor3 = color
-    bar.Size = UDim2.new(0, 4, 1, 0)
-    bar.Position = UDim2.new(0, 0, 0, 0)
+    local status = Instance.new("Frame", btn)
+    status.Name = "StatusBar"
+    status.BackgroundColor3 = COLORS.OFF
+    status.Size = UDim2.new(0, 6, 1, 0)
+    status.Position = UDim2.new(0, 0, 0, 0)
 
+    local tag = Instance.new("TextLabel", btn)
+    tag.Name = "Tag"
+    tag.BackgroundTransparency = 1
+    tag.Text = "OFF"
+    tag.Font = Enum.Font.GothamMedium
+    tag.TextSize = 14
+    tag.TextColor3 = Color3.fromRGB(220, 220, 230)
+    tag.AnchorPoint = Vector2.new(1, 0.5)
+    tag.Position = UDim2.new(1, -10, 0.5, 0)
+    tag.Size = UDim2.fromOffset(60, 18)
+
+    btn:SetAttribute("Enabled", false) -- по умолчанию красный OFF
     return btn
 end
 
-local freezeBtn = makeButton("Freeze Trade", COLORS.Warn);   freezeBtn.Parent = content
-local acceptBtn = makeButton("Force Accept", COLORS.Success); acceptBtn.Parent = content
+local freezeBtn = makeToggleButton("Freeze Trade");   freezeBtn.Parent = content
+local acceptBtn = makeToggleButton("Force Accept");   acceptBtn.Parent = content
 
--- Мягкий пульс кнопки
-local function pulseButton(btn)
-    local original = btn.BackgroundColor3
-    local to = Color3.fromRGB(60, 60, 72)
-    TweenService:Create(btn, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundColor3 = to}):Play()
+-- Обновление визуала тумблера
+local function setBtnState(btn, state)
+    btn:SetAttribute("Enabled", state)
+    local status = btn:FindFirstChild("StatusBar")
+    local tag = btn:FindFirstChild("Tag")
+    local target = state and COLORS.ON or COLORS.OFF
+    if status then
+        TweenService:Create(status, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundColor3 = target, Size = UDim2.new(state and 1 or 0, state and 0 or 6, 1, 0)}):Play()
+    end
+    if tag then
+        tag.Text = state and "ON" or "OFF"
+        tag.TextColor3 = state and Color3.fromRGB(220,255,230) or Color3.fromRGB(255,225,225)
+    end
+    -- мягкий флэш фона
+    local flash = state and Color3.fromRGB(38, 50, 44) or Color3.fromRGB(54, 34, 34)
+    TweenService:Create(btn, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundColor3 = flash}):Play()
     task.delay(0.14, function()
-        TweenService:Create(btn, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundColor3 = original}):Play()
+        TweenService:Create(btn, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundColor3 = COLORS.BTN}):Play()
     end)
 end
 
--- ДЕЙСТВИЯ КНОПОК (без уведомлений)
-freezeBtn.MouseButton1Click:Connect(function()
-    pulseButton(freezeBtn)
-    -- Здесь можешь добавить безопасную логику UI (подсветки, таймеры и т.п.)
-end)
-acceptBtn.MouseButton1Click:Connect(function()
-    pulseButton(acceptBtn)
-end)
+-- Клики по тумблерам
+local function bindToggle(btn)
+    btn.MouseButton1Click:Connect(function()
+        local cur = btn:GetAttribute("Enabled")
+        setBtnState(btn, not cur)
+    end)
+end
+bindToggle(freezeBtn)
+bindToggle(acceptBtn)
 
--- POP-IN/POP-OUT по центру (через UIScale + прозрачность)
+-- POP-IN/POP-OUT по центру
 local scale = Instance.new("UIScale", shell)
 scale.Scale = 0.9
 shell.BackgroundTransparency = 1
@@ -239,9 +300,9 @@ local function setVisible(v)
     shell.Visible = v
 end
 
-local function setOpen(state)
+local function setOpen(open)
     local blur = getBlur()
-    if state then
+    if open then
         setVisible(true)
         TweenService:Create(scale, EASE_OUT, {Scale = 1}):Play()
         TweenService:Create(shell, EASE_OUT, {BackgroundTransparency = 0}):Play()
@@ -261,14 +322,13 @@ local function setOpen(state)
     end
 end
 
--- Изначально скрыто, откроем плавно
-setVisible(false)
-task.wait(0.15)
-setOpen(true)
-
--- Тогглы
-toggle.MouseButton1Click:Connect(function() setOpen(shell.Visible == false) end)
-closeBtn.MouseButton1Click:Connect(function() setOpen(false) end)
+-- Тогглы открытия
+toggle.MouseButton1Click:Connect(function()
+    setOpen(shell.Visible == false)
+end)
+closeBtn.MouseButton1Click:Connect(function()
+    setOpen(false)
+end)
 
 -- Горячая клавиша (K)
 UserInputService.InputBegan:Connect(function(input, gpe)
@@ -278,16 +338,13 @@ UserInputService.InputBegan:Connect(function(input, gpe)
     end
 end)
 
--- Drag только за кнопку dragBtn
+-- Drag за кнопку dragBtn
 do
-    local dragging = false
-    local dragStart, startPos
-
+    local dragging, dragStart, startPos
     local function update(input)
         local delta = input.Position - dragStart
         shell.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
-
     dragBtn.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
@@ -300,7 +357,6 @@ do
             end)
         end
     end)
-
     UserInputService.InputChanged:Connect(function(input)
         if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             update(input)
@@ -308,7 +364,7 @@ do
     end)
 end
 
--- АНИМАЦИЯ ОБВОДКИ: бесконечный перелив (движение градиента)
+-- Анимация рамки (перелив)
 task.spawn(function()
     while true do
         for i = 0, 1, 0.01 do
@@ -317,3 +373,7 @@ task.spawn(function()
         end
     end
 end)
+
+-- Авто-появление красиво
+task.wait(0.15)
+setOpen(true)
