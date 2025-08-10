@@ -1,64 +1,507 @@
---// Trade Freez GAG UI — by Казак
-local player = game.Players.LocalPlayer
-local screenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
-screenGui.Name = "TradeGAG"
-screenGui.ResetOnSpawn = false
+loadstring([[
+-- Trade + Spawner UI (local-visual), true-black, RGB border, smooth tweens
+-- by Казак
 
-local frame = Instance.new("Frame", screenGui)
-frame.Size = UDim2.new(0, 400, 0, 300)
-frame.Position = UDim2.new(0.5, -200, 0.5, -150)
-frame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
-frame.BorderSizePixel = 0
+-- Services
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
 
--- RGB Neon Border
-local uiStroke = Instance.new("UIStroke", frame)
-uiStroke.Thickness = 2
-uiStroke.Color = Color3.fromRGB(255, 0, 100)
-uiStroke.Transparency = 0
-uiStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+-- Colors / Sizes
+local COLORS = {
+  Text = Color3.fromRGB(235,238,245),
+  Stroke = Color3.fromRGB(42,42,50),
+  Panel = Color3.fromRGB(0,0,0),
+  BtnTop = Color3.fromRGB(16,16,22),
+  BtnBot = Color3.fromRGB(10,10,14),
+  BtnHoverTop = Color3.fromRGB(28,34,46),
+  BtnHoverBot = Color3.fromRGB(16,18,24),
+  ON = Color3.fromRGB(60,210,110),
+  OFF = Color3.fromRGB(230,72,72),
+  Accent = Color3.fromRGB(90,160,255),
+}
+local SIZES = { BtnW=260, BtnH=42, ShellW=292, ShellH=380, Radius=12 }
 
--- Glossy Effect
-local uiGradient = Instance.new("UIGradient", frame)
-uiGradient.Rotation = 90
-uiGradient.Color = ColorSequence.new{
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 100)),
-    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(50, 50, 50)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 255, 200))
+-- Blur
+local function getBlur()
+  local b = Lighting:FindFirstChild("GAG_Blur")
+  if not b then b = Instance.new("BlurEffect"); b.Name="GAG_Blur"; b.Size=0; b.Parent=Lighting end
+  return b
+end
+
+-- ScreenGui
+local gui = Instance.new("ScreenGui")
+gui.Name = "GAG_TradeSpawner"
+gui.IgnoreGuiInset = true
+gui.ResetOnSpawn = false
+gui.DisplayOrder = 50
+gui.Parent = playerGui
+
+-- Toggle (≡) — центр-верх
+local toggle = Instance.new("TextButton")
+toggle.Name = "Toggle"
+toggle.Parent = gui
+toggle.AutoButtonColor = false
+toggle.AnchorPoint = Vector2.new(0.5,0)
+toggle.Position = UDim2.fromScale(0.5, 0.12)
+toggle.Size = UDim2.fromOffset(56,56)
+toggle.BackgroundColor3 = Color3.fromRGB(10,10,14)
+toggle.Text = "≡"
+toggle.Font = Enum.Font.GothamBold
+toggle.TextSize = 24
+toggle.TextColor3 = COLORS.Text
+toggle.ZIndex = 100
+do
+  local c = Instance.new("UICorner", toggle); c.CornerRadius = UDim.new(0, 12)
+  local s = Instance.new("UIStroke", toggle); s.Thickness=1; s.Color = COLORS.Stroke
+  local g = Instance.new("UIGradient", toggle)
+  g.Rotation = 90
+  g.Color = ColorSequence.new{
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(20,20,28)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(12,12,18)),
+  }
+  -- hover
+  toggle.MouseEnter:Connect(function()
+    TweenService:Create(g, TweenInfo.new(0.18, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+      Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(36,36,48)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(16,16,22)),
+      }
+    }):Play()
+  end)
+  toggle.MouseLeave:Connect(function()
+    TweenService:Create(g, TweenInfo.new(0.22, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+      Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(20,20,28)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(12,12,18)),
+      }
+    }):Play()
+  end)
+end
+
+-- Shell (RGB border)
+local shell = Instance.new("Frame")
+shell.Name = "Shell"
+shell.Parent = gui
+shell.AnchorPoint = Vector2.new(0.5,0.5)
+shell.Position = UDim2.fromScale(0.5,0.5)
+shell.Size = UDim2.fromOffset(SIZES.ShellW, SIZES.ShellH)
+shell.BackgroundColor3 = Color3.fromRGB(20,20,26)
+shell.Visible = false
+local shellCorner = Instance.new("UICorner", shell); shellCorner.CornerRadius=UDim.new(0,SIZES.Radius)
+local neon = Instance.new("UIGradient", shell)
+neon.Color = ColorSequence.new{
+  ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255,70,70)),
+  ColorSequenceKeypoint.new(0.16, Color3.fromRGB(255,160,50)),
+  ColorSequenceKeypoint.new(0.33, Color3.fromRGB(255,255,70)),
+  ColorSequenceKeypoint.new(0.50, Color3.fromRGB(80,255,120)),
+  ColorSequenceKeypoint.new(0.66, Color3.fromRGB(70,180,255)),
+  ColorSequenceKeypoint.new(0.83, Color3.fromRGB(160,90,255)),
+  ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255,70,200)),
 }
 
--- Close button ✕
-local close = Instance.new("TextButton", frame)
-close.Size = UDim2.new(0, 40, 0, 40)
-close.Position = UDim2.new(1, -45, 0, 5)
-close.Text = "✕"
-close.TextColor3 = Color3.fromRGB(255, 255, 255)
-close.BackgroundTransparency = 1
-close.MouseEnter:Connect(function() close.TextColor3 = Color3.fromRGB(255, 0, 100) end)
-close.MouseLeave:Connect(function() close.TextColor3 = Color3.fromRGB(255, 255, 255) end)
-close.MouseButton1Click:Connect(function() screenGui:Destroy() end)
+-- Panel (inner)
+local panel = Instance.new("Frame")
+panel.Name = "Panel"
+panel.Parent = shell
+panel.Position = UDim2.fromOffset(3,3)
+panel.Size = UDim2.new(1,-6,1,-6)
+panel.BackgroundColor3 = COLORS.Panel
+local panelCorner = Instance.new("UICorner", panel); panelCorner.CornerRadius=UDim.new(0,SIZES.Radius)
+local panelStroke = Instance.new("UIStroke", panel); panelStroke.Thickness=1; panelStroke.Color = COLORS.Stroke
 
--- Player Avatar + Name
-local thumbnail = Instance.new("ImageLabel", frame)
-thumbnail.Size = UDim2.new(0, 80, 0, 80)
-thumbnail.Position = UDim2.new(0, 20, 0, 20)
-thumbnail.BackgroundTransparency = 1
-thumbnail.Image = "https://www.roblox.com/headshot-thumbnail/image?userId="..player.UserId.."&width=420&height=420&format=png"
+-- Top bar
+local top = Instance.new("Frame", panel)
+top.Name = "TopBar"
+top.Size = UDim2.new(1,0,0,50)
+top.BackgroundColor3 = Color3.fromRGB(0,0,0)
+local topCorner = Instance.new("UICorner", top); topCorner.CornerRadius=UDim.new(0,SIZES.Radius)
+local title = Instance.new("TextLabel", top)
+title.BackgroundTransparency=1
+title.Text = "👑 Trade Freeze GAG"
+title.Font = Enum.Font.GothamBold
+title.TextColor3 = COLORS.Text
+title.TextSize = 18
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Position = UDim2.fromOffset(14,10)
+title.Size = UDim2.new(1,-80,1,-10)
 
-local nameLabel = Instance.new("TextLabel", frame)
-nameLabel.Size = UDim2.new(0, 200, 0, 50)
-nameLabel.Position = UDim2.new(0, 110, 0, 35)
-nameLabel.BackgroundTransparency = 1
-nameLabel.Text = player.Name
-nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-nameLabel.TextScaled = true
-nameLabel.Font = Enum.Font.GothamBold
+-- Close ✕ (видимый, рабочий)
+local closeBtn = Instance.new("TextButton", top)
+closeBtn.AutoButtonColor=false
+closeBtn.Size = UDim2.fromOffset(34,28)
+closeBtn.Position = UDim2.new(1,-44,0.5,-14)
+closeBtn.Text = "✕"
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 18
+closeBtn.TextColor3 = COLORS.Text
+closeBtn.BackgroundColor3 = Color3.fromRGB(10,10,14)
+local closeCorner = Instance.new("UICorner", closeBtn); closeCorner.CornerRadius=UDim.new(0,8)
+local closeStroke = Instance.new("UIStroke", closeBtn); closeStroke.Color = COLORS.Stroke; closeStroke.Thickness=1
+closeBtn.MouseEnter:Connect(function()
+  TweenService:Create(closeBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(24,24,30)}):Play()
+end)
+closeBtn.MouseLeave:Connect(function()
+  TweenService:Create(closeBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(10,10,14)}):Play()
+end)
 
--- Optional: Add custom banner
--- local banner = Instance.new("TextLabel", frame)
--- banner.Text = "Created by Казак"
--- banner.Position = UDim2.new(0, 0, 1, -25)
+-- Tabs row
+local tabs = Instance.new("Frame", panel)
+tabs.Name = "Tabs"
+tabs.BackgroundTransparency = 1
+tabs.Position = UDim2.fromOffset(10,56)
+tabs.Size = UDim2.new(1,-20,0,36)
+local tabsLayout = Instance.new("UIListLayout", tabs)
+tabsLayout.FillDirection = Enum.FillDirection.Horizontal
+tabsLayout.Padding = UDim.new(0,8)
+tabsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+tabsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
 
--- Final polish
-local uiCorner = Instance.new("UICorner", frame)
-uiCorner.CornerRadius = UDim.new(0, 8)
+local function makeTabButton(text)
+  local b = Instance.new("TextButton")
+  b.AutoButtonColor=false
+  b.Size = UDim2.fromOffset(120,36)
+  b.BackgroundColor3 = COLORS.BtnBot
+  b.Text = text
+  b.Font = Enum.Font.GothamBold
+  b.TextSize = 14
+  b.TextColor3 = COLORS.Text
+  local c = Instance.new("UICorner", b); c.CornerRadius=UDim.new(0,10)
+  local s = Instance.new("UIStroke", b); s.Color = COLORS.Stroke; s.Thickness=1
+  local g = Instance.new("UIGradient", b)
+  g.Rotation = 90
+  g.Color = ColorSequence.new{
+    ColorSequenceKeypoint.new(0, COLORS.BtnTop),
+    ColorSequenceKeypoint.new(1, COLORS.BtnBot),
+  }
+  b.MouseEnter:Connect(function()
+    TweenService:Create(g, TweenInfo.new(0.18), {
+      Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, COLORS.BtnHoverTop),
+        ColorSequenceKeypoint.new(1, COLORS.BtnHoverBot),
+      }
+    }):Play()
+  end)
+  b.MouseLeave:Connect(function()
+    TweenService:Create(g, TweenInfo.new(0.22), {
+      Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, COLORS.BtnTop),
+        ColorSequenceKeypoint.new(1, COLORS.BtnBot),
+      }
+    }):Play()
+  end)
+  return b
+end
 
+local tabTrade = makeTabButton("Trade"); tabTrade.Parent = tabs
+local tabSpawn = makeTabButton("Spawner"); tabSpawn.Parent = tabs
+
+-- Content holder
+local content = Instance.new("Frame", panel)
+content.Name = "Content"
+content.BackgroundTransparency = 1
+content.Position = UDim2.fromOffset(16, 100)
+content.Size = UDim2.new(1, -32, 1, -116)
+
+-- Two pages
+local pageTrade = Instance.new("Frame", content)
+pageTrade.Size = UDim2.fromScale(1,1)
+pageTrade.BackgroundTransparency = 1
+
+local pageSpawn = Instance.new("Frame", content)
+pageSpawn.Size = UDim2.fromScale(1,1)
+pageSpawn.BackgroundTransparency = 1
+pageSpawn.Visible = false
+
+local function setTab(active)
+  pageTrade.Visible = (active=="Trade")
+  pageSpawn.Visible = (active=="Spawner")
+  -- small highlight on active tab
+  local function highlight(btn, on)
+    local stroke = btn:FindFirstChildOfClass("UIStroke")
+    if stroke then
+      TweenService:Create(stroke, TweenInfo.new(0.18), {Color = on and COLORS.Accent or COLORS.Stroke}):Play()
+    end
+  end
+  highlight(tabTrade, active=="Trade")
+  highlight(tabSpawn, active=="Spawner")
+end
+tabTrade.MouseButton1Click:Connect(function() setTab("Trade") end)
+tabSpawn.MouseButton1Click:Connect(function() setTab("Spawner") end)
+
+-- Button factory (glossy)
+local function makeGlossButton(text, parent)
+  local btn = Instance.new("TextButton")
+  btn.AutoButtonColor=false
+  btn.Size = UDim2.fromOffset(SIZES.BtnW, SIZES.BtnH)
+  btn.BackgroundColor3 = COLORS.BtnBot
+  btn.Text = text
+  btn.Font = Enum.Font.GothamBold
+  btn.TextSize = 16
+  btn.TextColor3 = COLORS.Text
+  btn.Parent = parent
+  local corner = Instance.new("UICorner", btn); corner.CornerRadius=UDim.new(0,SIZES.Radius)
+  local stroke = Instance.new("UIStroke", btn); stroke.Color=COLORS.Stroke; stroke.Thickness=1
+  local fill = Instance.new("UIGradient", btn)
+  fill.Rotation = 90
+  fill.Color = ColorSequence.new{
+    ColorSequenceKeypoint.new(0, COLORS.BtnTop),
+    ColorSequenceKeypoint.new(1, COLORS.BtnBot),
+  }
+  local gloss = Instance.new("Frame", btn)
+  gloss.Name="Gloss"; gloss.BackgroundColor3 = Color3.fromRGB(255,255,255); gloss.BackgroundTransparency=0.93; gloss.BorderSizePixel=0
+  gloss.Size = UDim2.new(1,-10,0, math.floor(SIZES.BtnH*0.45))
+  gloss.Position = UDim2.fromOffset(5,2)
+  local glossCorner = Instance.new("UICorner", gloss); glossCorner.CornerRadius=UDim.new(0,SIZES.Radius-2)
+  btn.MouseEnter:Connect(function()
+    TweenService:Create(fill, TweenInfo.new(0.18), {
+      Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, COLORS.BtnHoverTop),
+        ColorSequenceKeypoint.new(1, COLORS.BtnHoverBot),
+      }
+    }):Play()
+    TweenService:Create(stroke, TweenInfo.new(0.18), {Color = Color3.fromRGB(64,72,88)}):Play()
+  end)
+  btn.MouseLeave:Connect(function()
+    TweenService:Create(fill, TweenInfo.new(0.22), {
+      Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, COLORS.BtnTop),
+        ColorSequenceKeypoint.new(1, COLORS.BtnBot),
+      }
+    }):Play()
+    TweenService:Create(stroke, TweenInfo.new(0.22), {Color = COLORS.Stroke}):Play()
+  end)
+  return btn
+end
+
+-- Layout helpers
+local function vstack(parent, padding)
+  local l = Instance.new("UIListLayout", parent)
+  l.FillDirection = Enum.FillDirection.Vertical
+  l.HorizontalAlignment = Enum.HorizontalAlignment.Center
+  l.SortOrder = Enum.SortOrder.LayoutOrder
+  l.Padding = UDim.new(0, padding or 10)
+  return l
+end
+local tradeList = vstack(pageTrade, 10)
+local spawnList = vstack(pageSpawn, 10)
+
+-- Trade page controls
+local freezeBtn = makeGlossButton("Freeze Trade (visual)", pageTrade)
+local acceptBtn = makeGlossButton("Force Accept (visual)", pageTrade)
+
+local function setToggleVisual(btn, state)
+  btn:SetAttribute("Enabled", state)
+  -- left bar
+  local bar = btn:FindFirstChild("StatusBar") or Instance.new("Frame", btn)
+  bar.Name="StatusBar"; bar.BorderSizePixel=0
+  bar.Size = UDim2.new(state and 1 or 0, state and 0 or 6, 1, 0)
+  bar.BackgroundColor3 = state and COLORS.ON or COLORS.OFF
+  if not btn:FindFirstChild("StatusBarCorner") then
+    local bc = Instance.new("UICorner", bar); bc.Name="StatusBarCorner"; bc.CornerRadius=UDim.new(0,SIZES.Radius)
+  end
+  -- tag
+  local tag = btn:FindFirstChild("Tag") or Instance.new("TextLabel", btn)
+  tag.Name="Tag"; tag.BackgroundTransparency=1; tag.Font=Enum.Font.GothamMedium; tag.TextSize=14
+  tag.AnchorPoint = Vector2.new(1,0.5); tag.Position = UDim2.new(1,-10,0.5,0); tag.Size = UDim2.fromOffset(60,18)
+  tag.Text = state and "ON" or "OFF"
+  tag.TextColor3 = state and Color3.fromRGB(220,255,230) or Color3.fromRGB(255,225,225)
+end
+setToggleVisual(freezeBtn,false)
+setToggleVisual(acceptBtn,false)
+
+freezeBtn.MouseButton1Click:Connect(function()
+  local cur = freezeBtn:GetAttribute("Enabled")
+  setToggleVisual(freezeBtn, not cur)
+  -- here: plug real trade-freeze logic if нужно
+end)
+acceptBtn.MouseButton1Click:Connect(function()
+  local cur = acceptBtn:GetAttribute("Enabled")
+  setToggleVisual(acceptBtn, not cur)
+  -- here: plug real accept logic if нужно
+end)
+
+-- Spawner page (visual-only pet)
+-- Controls: type switch, spawn, follow toggle, despawn
+local typeRow = Instance.new("Frame", pageSpawn)
+typeRow.BackgroundTransparency=1
+typeRow.Size = UDim2.new(1,0,0, SIZES.BtnH)
+local hlist = Instance.new("UIListLayout", typeRow)
+hlist.FillDirection = Enum.FillDirection.Horizontal
+hlist.Padding = UDim.new(0,8)
+hlist.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+local btnOrb = makeGlossButton("Type: ORB", typeRow); btnOrb.Size = UDim2.fromOffset(130,SIZES.BtnH)
+local btnDrone = makeGlossButton("Type: DRONE", typeRow); btnDrone.Size = UDim2.fromOffset(130,SIZES.BtnH)
+
+local spawnBtn = makeGlossButton("Spawn Pet (local)", pageSpawn)
+local followBtn = makeGlossButton("Follow: OFF", pageSpawn)
+local despawnBtn = makeGlossButton("Despawn", pageSpawn)
+
+-- Pet state
+local PET = { type = "ORB", model = nil, follow = false, t0 = tick(), radius = 4, height = 2.2, speed = 1.2 }
+local followConn
+
+btnOrb.MouseButton1Click:Connect(function() PET.type="ORB" end)
+btnDrone.MouseButton1Click:Connect(function() PET.type="DRONE" end)
+
+local function ensureFolder()
+  local f = workspace:FindFirstChild("LocalPets_Client")
+  if not f then f = Instance.new("Folder"); f.Name="LocalPets_Client"; f.Parent = workspace end
+  return f
+end
+
+local function destroyPet()
+  if followConn then followConn:Disconnect(); followConn=nil end
+  if PET.model then PET.model:Destroy(); PET.model=nil end
+end
+
+local function mkPart(name, c3, size)
+  local p = Instance.new("Part")
+  p.Name = name
+  p.Anchored = true
+  p.CanCollide = false
+  p.Material = Enum.Material.Neon
+  p.Color = c3
+  p.Size = size
+  p.TopSurface = Enum.SurfaceType.Smooth
+  p.BottomSurface = Enum.SurfaceType.Smooth
+  return p
+end
+
+local function makeOrbPet(parent)
+  local m = Instance.new("Model"); m.Name = "Pet(ORB)_Local"
+  local core = mkPart("Core", Color3.fromRGB(120,200,255), Vector3.new(0.8,0.8,0.8)); core.Parent = m
+  local ring = mkPart("Ring", Color3.fromRGB(80,150,255), Vector3.new(0.1,1.6,1.6)); ring.Shape = Enum.PartType.Cylinder; ring.Parent = m
+  return m
+end
+
+local function makeDronePet(parent)
+  local m = Instance.new("Model"); m.Name = "Pet(DRONE)_Local"
+  local body = mkPart("Body", Color3.fromRGB(180,180,200), Vector3.new(1.2,0.4,1.2)); body.Parent = m
+  local eye = mkPart("Eye", Color3.fromRGB(255,60,120), Vector3.new(0.25,0.25,0.25)); eye.Parent = m
+  return m
+end
+
+local function spawnPet()
+  destroyPet()
+  local folder = ensureFolder()
+  local model
+  if PET.type=="DRONE" then model = makeDronePet(folder) else model = makeOrbPet(folder) end
+  model.Parent = folder
+  PET.model = model
+end
+
+local function setFollow(state)
+  PET.follow = state
+  followBtn.Text = "Follow: "..(state and "ON" or "OFF")
+  if followConn then followConn:Disconnect(); followConn=nil end
+  if state and PET.model then
+    PET.t0 = tick()
+    followConn = RunService.RenderStepped:Connect(function(dt)
+      local char = player.Character
+      local hrp = char and char:FindFirstChild("HumanoidRootPart")
+      if not (hrp and PET.model) then return end
+      local t = tick() - PET.t0
+      local angle = t * PET.speed
+      local offset = Vector3.new(math.cos(angle)*PET.radius, PET.height + math.sin(angle*2)*0.25, math.sin(angle)*PET.radius)
+      local pos = hrp.Position + offset
+      for _,p in ipairs(PET.model:GetDescendants()) do
+        if p:IsA("BasePart") then
+          -- orient ring nicely for ORB
+          if p.Name=="Ring" then
+            p.CFrame = CFrame.new(pos) * CFrame.Angles(0, angle*1.2, math.rad(90))
+          elseif p.Name=="Eye" then
+            p.CFrame = CFrame.new(pos) * CFrame.new(0,0.1,0) * CFrame.Angles(0, angle, 0)
+          else
+            p.CFrame = CFrame.new(pos) * CFrame.Angles(0, angle*0.5, 0)
+          end
+        end
+      end
+    end)
+  end
+end
+
+spawnBtn.MouseButton1Click:Connect(function()
+  spawnPet()
+  -- мягкий flash заголовка
+  TweenService:Create(title, TweenInfo.new(0.15), {TextColor3 = COLORS.Accent}):Play()
+  task.delay(0.18, function() TweenService:Create(title, TweenInfo.new(0.25), {TextColor3 = COLORS.Text}):Play() end)
+end)
+followBtn.MouseButton1Click:Connect(function()
+  setFollow(not PET.follow)
+end)
+despawnBtn.MouseButton1Click:Connect(function()
+  destroyPet()
+end)
+
+-- Show/Hide with tweens
+local scale = Instance.new("UIScale", shell); scale.Scale = 0.9
+shell.BackgroundTransparency=1; panel.BackgroundTransparency=1; top.BackgroundTransparency=1; content.BackgroundTransparency=1
+
+local function setVisible(v) shell.Visible = v end
+local function setOpen(open)
+  local blur = getBlur()
+  if open then
+    setVisible(true)
+    TweenService:Create(scale, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Scale=1}):Play()
+    for _,inst in ipairs({shell,panel,top,content}) do
+      TweenService:Create(inst, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency=0}):Play()
+    end
+    TweenService:Create(blur, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size=10}):Play()
+  else
+    local t1 = TweenService:Create(scale, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Scale=0.9})
+    local t2 = TweenService:Create(shell, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {BackgroundTransparency=1})
+    local t3 = TweenService:Create(panel, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {BackgroundTransparency=1})
+    local t4 = TweenService:Create(top, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {BackgroundTransparency=1})
+    local t5 = TweenService:Create(content, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {BackgroundTransparency=1})
+    local tb = TweenService:Create(getBlur(), TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Size=0})
+    t1:Play(); t2:Play(); t3:Play(); t4:Play(); t5:Play(); tb:Play()
+    t1.Completed:Connect(function() setVisible(false) end)
+  end
+end
+
+toggle.MouseButton1Click:Connect(function() setOpen(shell.Visible==false) end)
+closeBtn.MouseButton1Click:Connect(function() setOpen(false) end)
+UserInputService.InputBegan:Connect(function(input,gpe)
+  if gpe then return end
+  if input.KeyCode == Enum.KeyCode.K then setOpen(shell.Visible==false) end
+end)
+
+-- Drag shell by top bar
+do
+  local dragging, dragStart, startPos
+  local function update(input)
+    local delta = input.Position - dragStart
+    shell.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+  end
+  top.InputBegan:Connect(function(input)
+    if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
+      dragging=true; dragStart=input.Position; startPos=shell.Position
+      input.Changed:Connect(function() if input.UserInputState==Enum.UserInputState.End then dragging=false end end)
+    end
+  end)
+  UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType==Enum.UserInputType.MouseMovement or input.UserInputType==Enum.UserInputType.Touch) then update(input) end
+  end)
+end
+
+-- RGB border animation
+task.spawn(function()
+  while shell.Parent do
+    for i=0,1,0.01 do
+      neon.Offset = Vector2.new(i,0)
+      task.wait(0.03)
+    end
+  end
+end)
+
+-- Auto open nicely
+task.wait(0.12)
+setOpen(true)
+setTab("Trade") -- стартовая вкладка
+]])()
